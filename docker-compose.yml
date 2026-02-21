@@ -1,0 +1,112 @@
+# AgentID — Local Development Stack
+# Usage: docker compose up (one command, full stack)
+
+services:
+  # --- PostgreSQL ---
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: agentid
+      POSTGRES_USER: agentid
+      POSTGRES_PASSWORD: localdev
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agentid"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # --- Redis ---
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # --- API (FastAPI) ---
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: backend-base
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./apps/api:/app
+      - ./alembic:/app/alembic
+      - ./alembic.ini:/app/alembic.ini
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://agentid:localdev@postgres:5432/agentid
+      REDIS_URL: redis://redis:6379/0
+      ENVIRONMENT: development
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # --- Celery Worker ---
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: backend-base
+    command: celery -A worker:celery_app worker --loglevel=info --concurrency=2
+    volumes:
+      - ./apps/api:/app
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://agentid:localdev@postgres:5432/agentid
+      REDIS_URL: redis://redis:6379/0
+      ENVIRONMENT: development
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # --- Frontend (Next.js dev) ---
+  web:
+    image: node:20-alpine
+    working_dir: /app
+    command: sh -c "npm install && npm run dev"
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./apps/web:/app
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+      NODE_ENV: development
+
+  # --- Celery Beat (scheduler) ---
+  beat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: backend-base
+    command: celery -A worker:celery_app beat --loglevel=info
+    volumes:
+      - ./apps/api:/app
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://agentid:localdev@postgres:5432/agentid
+      REDIS_URL: redis://redis:6379/0
+      ENVIRONMENT: development
+    depends_on:
+      redis:
+        condition: service_healthy
+
+volumes:
+  pgdata:

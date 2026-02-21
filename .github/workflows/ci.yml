@@ -1,0 +1,126 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+env:
+  PYTHON_VERSION: "3.12"
+  NODE_VERSION: "20"
+
+jobs:
+  # --- Backend Tests ---
+  backend-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: agentid_test
+          POSTGRES_USER: agentid
+          POSTGRES_PASSWORD: test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: apps/api/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          cd apps/api
+          pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Lint (ruff)
+        run: |
+          cd apps/api
+          ruff check .
+          ruff format --check .
+
+      - name: Type check (mypy)
+        run: |
+          cd apps/api
+          mypy . --ignore-missing-imports
+
+      - name: Run tests
+        env:
+          DATABASE_URL: postgresql+asyncpg://agentid:test@localhost:5432/agentid_test
+          REDIS_URL: redis://localhost:6379/0
+          ENVIRONMENT: test
+          SECRET_KEY: test-secret-key
+          JWT_SECRET: test-jwt-secret
+          VAULT_MASTER_KEY: test-vault-key
+        run: |
+          cd apps/api
+          alembic upgrade head
+          pytest -v --cov=. --cov-report=xml --tb=short
+
+      - name: Upload coverage
+        if: github.event_name == 'push'
+        uses: codecov/codecov-action@v4
+        with:
+          file: apps/api/coverage.xml
+
+  # --- Frontend Tests ---
+  frontend-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Install & lint
+        run: |
+          cd apps/web
+          npm ci
+          npm run lint
+
+      - name: Type check
+        run: |
+          cd apps/web
+          npm run type-check
+
+      - name: Run tests
+        run: |
+          cd apps/web
+          npm test -- --ci --coverage
+
+      - name: Build
+        run: |
+          cd apps/web
+          npm run build
+
+  # --- Security scan ---
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: HIGH,CRITICAL
