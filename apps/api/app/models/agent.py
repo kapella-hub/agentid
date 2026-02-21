@@ -24,8 +24,8 @@ class Agent(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
     org = relationship("Org", back_populates="agents")
-    email_identities: Mapped[list["EmailIdentity"]] = relationship(back_populates="agent")  # noqa: F821
-    phone_identities: Mapped[list["PhoneIdentity"]] = relationship(back_populates="agent")  # noqa: F821
+    email_identities: Mapped[list["EmailIdentity"]] = relationship(back_populates="agent", cascade="all, delete-orphan")  # noqa: F821
+    phone_identities: Mapped[list["PhoneIdentity"]] = relationship(back_populates="agent", cascade="all, delete-orphan")  # noqa: F821
 
 
 class AgentToken(Base):

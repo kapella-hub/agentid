@@ -3,7 +3,10 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field
+from enum import Enum
+from typing import Literal
+
+from pydantic import AnyHttpUrl, BaseModel, EmailStr, Field
 
 
 # ---- Auth ----
@@ -132,10 +135,10 @@ class MessageResponse(BaseModel):
 
 class SendMessageRequest(BaseModel):
     agent_id: UUID
-    channel: str  # email | sms
+    channel: Literal["email", "sms"]
     to: str
     subject: str | None = None
-    body: str
+    body: str = Field(min_length=1)
 
 
 # ---- Vault ----
@@ -170,8 +173,8 @@ class SecretUpdate(BaseModel):
 # ---- Webhook ----
 
 class WebhookCreate(BaseModel):
-    url: str
-    events: list[str]
+    url: AnyHttpUrl
+    events: list[str] = Field(min_length=1)
 
 
 class WebhookResponse(BaseModel):

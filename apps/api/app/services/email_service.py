@@ -1,5 +1,6 @@
 """Email provisioning service — Mailgun integration."""
 
+import logging
 from uuid import UUID
 
 import httpx
@@ -8,6 +9,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.models.identity import EmailIdentity
+
+logger = logging.getLogger(__name__)
+
+_TIMEOUT = httpx.Timeout(30.0, connect=10.0)
 
 
 class MailgunClient:
@@ -20,7 +25,7 @@ class MailgunClient:
 
     async def create_route(self, address: str, webhook_url: str) -> str:
         """Create a Mailgun route that forwards inbound mail to our webhook."""
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
             resp = await client.post(
                 f"{self.base_url}/routes",
                 auth=("api", self.api_key),
@@ -35,7 +40,7 @@ class MailgunClient:
             return resp.json()["route"]["id"]
 
     async def delete_route(self, route_id: str) -> None:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
             resp = await client.delete(
                 f"{self.base_url}/routes/{route_id}",
                 auth=("api", self.api_key),
@@ -53,7 +58,7 @@ class MailgunClient:
         }
         if html:
             data["html"] = html
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
             resp = await client.post(
                 f"{self.base_url}/{self.domain}/messages",
                 auth=("api", self.api_key),
@@ -95,12 +100,13 @@ async def provision_email(
 
     # Provision with Mailgun (skip if no API key configured)
     if settings.mailgun_api_key:
-        webhook_url = f"https://api.agentid.io/hooks/mailgun/inbound"
+        webhook_url = f"{settings.webhook_base_url}/hooks/mailgun/inbound"
         try:
             route_id = await mailgun.create_route(address, webhook_url)
             identity.provider_id = route_id
             identity.status = "active"
-        except Exception:
+        except Exception as e:
+            logger.error("Failed to provision Mailgun route for %s: %s", address, e)
             identity.status = "failed"
     else:
         identity.status = "active"  # dev mode
@@ -112,6 +118,6 @@ async def deprovision_email(db: AsyncSession, identity: EmailIdentity) -> None:
     if identity.provider_id and settings.mailgun_api_key:
         try:
             await mailgun.delete_route(identity.provider_id)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error("Failed to delete Mailgun route %s: %s", identity.provider_id, e)
     identity.status = "deleted"

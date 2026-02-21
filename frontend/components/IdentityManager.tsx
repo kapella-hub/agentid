@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { Mail, Phone, MessageSquare, Plus, Trash2, Copy, ExternalLink } from 'lucide-react';
+import { useState, useCallback } from 'react';
+import { Mail, Phone, MessageSquare, Plus, Trash2, Copy, ExternalLink, Check } from 'lucide-react';
 
 interface IdentityManagerProps {
   agentId: string | null;
@@ -27,6 +27,23 @@ interface PhoneIdentity {
 
 export default function IdentityManager({ agentId }: IdentityManagerProps) {
   const [activeTab, setActiveTab] = useState<'email' | 'phone' | 'messages'>('email');
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+
+  const handleCopy = useCallback(async (text: string, id: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 2000);
+    } catch {
+      // Clipboard API not available
+    }
+  }, []);
+
+  const handleDelete = useCallback((id: string) => {
+    // TODO: call api.identities.email.delete or phone.delete
+    setDeleteConfirmId(null);
+  }, []);
 
   // Mock data
   const emailIdentities: EmailIdentity[] = agentId
@@ -81,9 +98,11 @@ export default function IdentityManager({ agentId }: IdentityManagerProps) {
         </p>
 
         {/* Tabs */}
-        <div className="flex space-x-4 mt-6 border-b border-gray-200 dark:border-gray-700">
+        <div className="flex space-x-4 mt-6 border-b border-gray-200 dark:border-gray-700" role="tablist">
           <button
             onClick={() => setActiveTab('email')}
+            role="tab"
+            aria-selected={activeTab === 'email'}
             className={`px-4 py-2 font-medium text-sm border-b-2 transition-colors ${
               activeTab === 'email'
                 ? 'border-blue-600 text-blue-600'
@@ -95,6 +114,8 @@ export default function IdentityManager({ agentId }: IdentityManagerProps) {
           </button>
           <button
             onClick={() => setActiveTab('phone')}
+            role="tab"
+            aria-selected={activeTab === 'phone'}
             className={`px-4 py-2 font-medium text-sm border-b-2 transition-colors ${
               activeTab === 'phone'
                 ? 'border-blue-600 text-blue-600'
@@ -106,6 +127,8 @@ export default function IdentityManager({ agentId }: IdentityManagerProps) {
           </button>
           <button
             onClick={() => setActiveTab('messages')}
+            role="tab"
+            aria-selected={activeTab === 'messages'}
             className={`px-4 py-2 font-medium text-sm border-b-2 transition-colors ${
               activeTab === 'messages'
                 ? 'border-blue-600 text-blue-600'
@@ -119,7 +142,7 @@ export default function IdentityManager({ agentId }: IdentityManagerProps) {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 overflow-y-auto p-6" role="tabpanel">
         {activeTab === 'email' && (
           <div>
             <div className="flex justify-between items-center mb-4">
@@ -155,12 +178,39 @@ export default function IdentityManager({ agentId }: IdentityManagerProps) {
                       </p>
                     </div>
                     <div className="flex space-x-2">
-                      <button className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
-                        <Copy className="w-4 h-4" />
+                      <button
+                        onClick={() => handleCopy(email.address, email.id)}
+                        className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                        aria-label="Copy email address"
+                        title="Copy"
+                      >
+                        {copiedId === email.id ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
                       </button>
-                      <button className="p-2 text-gray-400 hover:text-red-600">
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {deleteConfirmId === email.id ? (
+                        <div className="flex items-center space-x-1">
+                          <button
+                            onClick={() => handleDelete(email.id)}
+                            className="px-2 py-1 text-xs bg-red-600 text-white rounded"
+                          >
+                            Confirm
+                          </button>
+                          <button
+                            onClick={() => setDeleteConfirmId(null)}
+                            className="px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setDeleteConfirmId(email.id)}
+                          className="p-2 text-gray-400 hover:text-red-600"
+                          aria-label="Delete email identity"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -217,12 +267,39 @@ export default function IdentityManager({ agentId }: IdentityManagerProps) {
                       </p>
                     </div>
                     <div className="flex space-x-2">
-                      <button className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
-                        <Copy className="w-4 h-4" />
+                      <button
+                        onClick={() => handleCopy(phone.number, phone.id)}
+                        className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                        aria-label="Copy phone number"
+                        title="Copy"
+                      >
+                        {copiedId === phone.id ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
                       </button>
-                      <button className="p-2 text-gray-400 hover:text-red-600">
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {deleteConfirmId === phone.id ? (
+                        <div className="flex items-center space-x-1">
+                          <button
+                            onClick={() => handleDelete(phone.id)}
+                            className="px-2 py-1 text-xs bg-red-600 text-white rounded"
+                          >
+                            Confirm
+                          </button>
+                          <button
+                            onClick={() => setDeleteConfirmId(null)}
+                            className="px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setDeleteConfirmId(phone.id)}
+                          className="p-2 text-gray-400 hover:text-red-600"
+                          aria-label="Delete phone identity"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   </div>
 

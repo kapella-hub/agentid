@@ -4,6 +4,7 @@ import base64
 import json
 from uuid import UUID
 
+from fastapi import HTTPException
 from sqlalchemy import Select
 
 
@@ -14,8 +15,13 @@ def encode_cursor(id: UUID) -> str:
 
 def decode_cursor(cursor: str) -> UUID:
     """Decode an opaque cursor string back into a UUID."""
-    data = json.loads(base64.urlsafe_b64decode(cursor.encode()).decode())
-    return UUID(data["id"])
+    if len(cursor) > 1024:
+        raise HTTPException(status_code=400, detail="Invalid cursor")
+    try:
+        data = json.loads(base64.urlsafe_b64decode(cursor.encode()).decode())
+        return UUID(data["id"])
+    except (json.JSONDecodeError, KeyError, ValueError, Exception):
+        raise HTTPException(status_code=400, detail="Invalid cursor")
 
 
 def apply_cursor(query: Select, cursor: str | None, id_column, limit: int) -> Select:

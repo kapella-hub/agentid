@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { Shield, Plus, Eye, EyeOff, Copy, Trash2, Key, Lock } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Shield, Plus, Eye, EyeOff, Copy, Trash2, Key, Lock, Check } from 'lucide-react';
 
 interface CredentialVaultProps {
   agentId: string | null;
@@ -19,6 +19,61 @@ interface Secret {
 export default function CredentialVault({ agentId }: CredentialVaultProps) {
   const [revealedSecrets, setRevealedSecrets] = useState<Set<string>>(new Set());
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+
+  // Form state
+  const [secretName, setSecretName] = useState('');
+  const [secretType, setSecretType] = useState<Secret['type']>('api-key');
+  const [secretValue, setSecretValue] = useState('');
+  const [formErrors, setFormErrors] = useState<{ name?: string; value?: string }>({});
+
+  // Close modals on Escape
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowCreateModal(false);
+        setDeleteConfirmId(null);
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  const resetForm = useCallback(() => {
+    setSecretName('');
+    setSecretType('api-key');
+    setSecretValue('');
+    setFormErrors({});
+  }, []);
+
+  const handleCopy = useCallback(async (text: string, secretId: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedId(secretId);
+      setTimeout(() => setCopiedId(null), 2000);
+    } catch {
+      // Clipboard API not available
+    }
+  }, []);
+
+  const handleDelete = useCallback((secretId: string) => {
+    // TODO: call api.vault.delete(secretId)
+    setDeleteConfirmId(null);
+  }, []);
+
+  const handleCreateSecret = useCallback(() => {
+    const errors: { name?: string; value?: string } = {};
+    if (!secretName.trim()) errors.name = 'Name is required';
+    if (!secretValue.trim()) errors.value = 'Value is required';
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
+      return;
+    }
+    // TODO: call api.vault.create({ name: secretName, value: secretValue, type: secretType, agent_id: agentId })
+    setShowCreateModal(false);
+    resetForm();
+  }, [secretName, secretValue, secretType, agentId, resetForm]);
 
   // Mock data
   const secrets: Secret[] = agentId
@@ -146,16 +201,23 @@ export default function CredentialVault({ agentId }: CredentialVaultProps) {
                     {/* Secret Value */}
                     <div className="flex items-center space-x-2 mb-3">
                       <code className="flex-1 px-3 py-2 bg-gray-100 dark:bg-gray-700 rounded font-mono text-sm text-gray-900 dark:text-white">
-                        {isRevealed ? 'xxxx_test_EXAMPLE_KEY_NOT_REAL_12345' : '••••••••••••••••••••••••••••'}
+                        {isRevealed ? 'xxxx_test_EXAMPLE_KEY_NOT_REAL_12345' : '\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022'}
                       </code>
                       <button
                         onClick={() => toggleReveal(secret.id)}
                         className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                        aria-label={isRevealed ? 'Hide secret' : 'Reveal secret'}
+                        title={isRevealed ? 'Hide' : 'Reveal'}
                       >
                         {isRevealed ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
-                      <button className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
-                        <Copy className="w-4 h-4" />
+                      <button
+                        onClick={() => handleCopy('xxxx_test_EXAMPLE_KEY_NOT_REAL_12345', secret.id)}
+                        className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                        aria-label="Copy to clipboard"
+                        title="Copy to clipboard"
+                      >
+                        {copiedId === secret.id ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
                       </button>
                     </div>
 
@@ -177,9 +239,31 @@ export default function CredentialVault({ agentId }: CredentialVaultProps) {
                     </div>
                   </div>
 
-                  <button className="p-2 text-gray-400 hover:text-red-600">
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  {deleteConfirmId === secret.id ? (
+                    <div className="flex items-center space-x-1">
+                      <button
+                        onClick={() => handleDelete(secret.id)}
+                        className="px-2 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700"
+                      >
+                        Confirm
+                      </button>
+                      <button
+                        onClick={() => setDeleteConfirmId(null)}
+                        className="px-2 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setDeleteConfirmId(secret.id)}
+                      className="p-2 text-gray-400 hover:text-red-600"
+                      aria-label="Delete secret"
+                      title="Delete"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
               </div>
             );
@@ -189,51 +273,70 @@ export default function CredentialVault({ agentId }: CredentialVaultProps) {
 
       {/* Create Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+          onClick={(e) => { if (e.target === e.currentTarget) { setShowCreateModal(false); resetForm(); } }}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="add-secret-title"
+        >
           <div className="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-md w-full">
-            <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">Add Secret</h3>
+            <h3 id="add-secret-title" className="text-xl font-bold text-gray-900 dark:text-white mb-4">Add Secret</h3>
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                <label htmlFor="secret-name" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Name
                 </label>
                 <input
+                  id="secret-name"
                   type="text"
                   placeholder="e.g., OpenAI API Key"
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  value={secretName}
+                  onChange={(e) => { setSecretName(e.target.value); setFormErrors((p) => ({ ...p, name: undefined })); }}
+                  className={`w-full px-4 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white ${formErrors.name ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'}`}
                 />
+                {formErrors.name && <p className="text-sm text-red-500 mt-1">{formErrors.name}</p>}
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                <label htmlFor="secret-type" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Type
                 </label>
-                <select className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white">
-                  <option>API Key</option>
-                  <option>Password</option>
-                  <option>2FA Seed</option>
-                  <option>OAuth Token</option>
+                <select
+                  id="secret-type"
+                  value={secretType}
+                  onChange={(e) => setSecretType(e.target.value as Secret['type'])}
+                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                >
+                  <option value="api-key">API Key</option>
+                  <option value="password">Password</option>
+                  <option value="2fa-seed">2FA Seed</option>
+                  <option value="oauth-token">OAuth Token</option>
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                <label htmlFor="secret-value" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Value
                 </label>
                 <input
+                  id="secret-value"
                   type="password"
                   placeholder="Enter secret value"
-                  className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  value={secretValue}
+                  onChange={(e) => { setSecretValue(e.target.value); setFormErrors((p) => ({ ...p, value: undefined })); }}
+                  className={`w-full px-4 py-2 border rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white ${formErrors.value ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'}`}
                 />
+                {formErrors.value && <p className="text-sm text-red-500 mt-1">{formErrors.value}</p>}
               </div>
             </div>
             <div className="flex space-x-3 mt-6">
               <button
-                onClick={() => setShowCreateModal(false)}
+                onClick={() => { setShowCreateModal(false); resetForm(); }}
                 className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
               >
                 Cancel
               </button>
               <button
-                onClick={() => setShowCreateModal(false)}
+                onClick={handleCreateSecret}
                 className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
               >
                 Add Secret

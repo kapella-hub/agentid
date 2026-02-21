@@ -1,5 +1,6 @@
 """Virtual phone provisioning service — Twilio integration."""
 
+import logging
 from uuid import UUID
 
 import httpx
@@ -8,6 +9,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.models.identity import PhoneIdentity
+
+logger = logging.getLogger(__name__)
+
+_TIMEOUT = httpx.Timeout(30.0, connect=10.0)
 
 
 class TwilioClient:
@@ -24,7 +29,7 @@ class TwilioClient:
 
     async def buy_number(self, country: str, capabilities: list[str]) -> dict:
         # Search for available number
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
             search_resp = await client.get(
                 f"{self.base_url}/AvailablePhoneNumbers/{country}/Local.json",
                 auth=self._auth,
@@ -43,7 +48,7 @@ class TwilioClient:
                 auth=self._auth,
                 data={
                     "PhoneNumber": phone_number,
-                    "SmsUrl": "https://api.agentid.io/hooks/twilio/sms",
+                    "SmsUrl": f"{settings.webhook_base_url}/hooks/twilio/sms",
                     "SmsMethod": "POST",
                 },
             )
@@ -52,7 +57,7 @@ class TwilioClient:
             return {"number": data["phone_number"], "sid": data["sid"]}
 
     async def release_number(self, sid: str) -> None:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
             resp = await client.delete(
                 f"{self.base_url}/IncomingPhoneNumbers/{sid}.json",
                 auth=self._auth,
@@ -60,7 +65,7 @@ class TwilioClient:
             resp.raise_for_status()
 
     async def send_sms(self, from_number: str, to: str, body: str) -> str:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
             resp = await client.post(
                 f"{self.base_url}/Messages.json",
                 auth=self._auth,
@@ -100,8 +105,9 @@ async def provision_phone(
             identity.provider_sid = result["sid"]
             identity.status = "active"
         except Exception as e:
+            logger.error("Failed to provision phone number in %s: %s", country, e)
             identity.status = "failed"
-            identity.config = {"error": str(e)}
+            identity.config = {"error_type": type(e).__name__}
     else:
         # Dev mode — assign a fake number
         identity.number = f"+1555000{str(identity.id)[:4]}"
@@ -114,6 +120,6 @@ async def deprovision_phone(db: AsyncSession, identity: PhoneIdentity) -> None:
     if identity.provider_sid and settings.twilio_account_sid:
         try:
             await twilio_client.release_number(identity.provider_sid)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error("Failed to release phone number %s: %s", identity.provider_sid, e)
     identity.status = "deleted"

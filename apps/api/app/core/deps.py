@@ -1,5 +1,6 @@
 """FastAPI dependency injection helpers."""
 
+from datetime import datetime, timezone
 from typing import Annotated
 from uuid import UUID
 
@@ -49,8 +50,13 @@ async def get_current_auth(
 
     # Try API key
     token_hash = hash_token(token)
+    now = datetime.now(timezone.utc)
     result = await db.execute(
-        select(ApiKey).where(ApiKey.key_hash == token_hash, ApiKey.revoked_at.is_(None))
+        select(ApiKey).where(
+            ApiKey.key_hash == token_hash,
+            ApiKey.revoked_at.is_(None),
+            (ApiKey.expires_at.is_(None)) | (ApiKey.expires_at > now),
+        )
     )
     api_key = result.scalar_one_or_none()
     if api_key is None:

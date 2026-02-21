@@ -1,5 +1,7 @@
 """Message retrieval and sending endpoints."""
 
+import logging
+from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query
@@ -12,6 +14,8 @@ from app.schemas import MessageResponse, PaginatedResponse, SendMessageRequest
 from app.services.email_service import mailgun
 from app.services.phone_service import twilio_client
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/messages", tags=["messages"])
 
 
@@ -20,8 +24,8 @@ async def list_messages(
     auth: Auth,
     db: DB,
     agent_id: UUID | None = None,
-    channel: str | None = None,
-    direction: str | None = None,
+    channel: Literal["email", "sms"] | None = None,
+    direction: Literal["inbound", "outbound"] | None = None,
     limit: int = Query(default=50, le=100),
     cursor: str | None = None,
 ):
@@ -70,14 +74,20 @@ async def send_message(req: SendMessageRequest, auth: Auth, db: DB):
         if not identity:
             raise HTTPException(status_code=400, detail="No active email identity for agent")
 
-        provider_id = await mailgun.send_email(identity.address, req.to, req.subject or "", req.body)
+        try:
+            provider_id = await mailgun.send_email(identity.address, req.to, req.subject or "", req.body)
+            msg_status = "delivered"
+        except Exception as e:
+            logger.error("Failed to send email via Mailgun: %s", e)
+            provider_id = None
+            msg_status = "failed"
 
         msg = Message(
             org_id=auth["org_id"], agent_id=req.agent_id, channel="email",
             direction="outbound", identity_id=identity.id,
             sender=identity.address, recipient=req.to,
             subject=req.subject, body_text=req.body,
-            provider_id=provider_id, status="delivered",
+            provider_id=provider_id, status=msg_status,
         )
     elif req.channel == "sms":
         result = await db.execute(
@@ -91,13 +101,19 @@ async def send_message(req: SendMessageRequest, auth: Auth, db: DB):
         if not identity:
             raise HTTPException(status_code=400, detail="No active phone identity for agent")
 
-        provider_id = await twilio_client.send_sms(identity.number, req.to, req.body)
+        try:
+            provider_id = await twilio_client.send_sms(identity.number, req.to, req.body)
+            msg_status = "delivered"
+        except Exception as e:
+            logger.error("Failed to send SMS via Twilio: %s", e)
+            provider_id = None
+            msg_status = "failed"
 
         msg = Message(
             org_id=auth["org_id"], agent_id=req.agent_id, channel="sms",
             direction="outbound", identity_id=identity.id,
             sender=identity.number, recipient=req.to,
-            body_text=req.body, provider_id=provider_id, status="delivered",
+            body_text=req.body, provider_id=provider_id, status=msg_status,
         )
     else:
         raise HTTPException(status_code=400, detail="Invalid channel")

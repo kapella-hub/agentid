@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, JSON, Text, func
+from sqlalchemy import DateTime, ForeignKey, Index, JSON, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -12,6 +12,9 @@ from app.core.types import GUID, StringArray
 
 class EmailIdentity(Base):
     __tablename__ = "email_identities"
+    __table_args__ = (
+        Index("ix_email_identities_org_agent", "org_id", "agent_id"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
     agent_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("agents.id"), nullable=False)
@@ -31,6 +34,9 @@ class EmailIdentity(Base):
 
 class PhoneIdentity(Base):
     __tablename__ = "phone_identities"
+    __table_args__ = (
+        Index("ix_phone_identities_org_agent", "org_id", "agent_id"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
     agent_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("agents.id"), nullable=False)
@@ -50,6 +56,10 @@ class PhoneIdentity(Base):
 
 class Message(Base):
     __tablename__ = "messages"
+    __table_args__ = (
+        Index("ix_messages_org_agent", "org_id", "agent_id"),
+        Index("ix_messages_org_created", "org_id", "created_at"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(GUID(), primary_key=True, default=uuid.uuid4)
     org_id: Mapped[uuid.UUID] = mapped_column(GUID(), ForeignKey("orgs.id"), nullable=False)

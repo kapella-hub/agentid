@@ -6,6 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import select
 
+from app.core.config import settings
 from app.core.deps import DB, Auth
 from app.core.pagination import apply_cursor, encode_cursor
 from app.core.security import create_agent_token
@@ -91,7 +92,7 @@ async def issue_agent_token(agent_id: UUID, req: AgentTokenCreate, auth: Auth, d
         raise HTTPException(status_code=404, detail="Agent not found")
 
     raw_token, token_hash = create_agent_token(str(auth["org_id"]), str(agent_id), req.scopes)
-    expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=settings.agent_token_expire_minutes)
 
     agent_token = AgentToken(
         agent_id=agent_id,

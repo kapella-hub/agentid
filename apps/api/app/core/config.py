@@ -40,6 +40,12 @@ class Settings(BaseSettings):
     # Vault encryption
     vault_master_key: str = ""  # Base64-encoded 32-byte key (for local dev; use KMS in prod)
 
+    # Webhook callback base URL (set to your public API URL in production)
+    webhook_base_url: str = "https://api.agentid.io"
+
+    # CORS
+    cors_allowed_origins: list[str] = ["http://localhost:3000"]
+
     # Rate limiting
     rate_limit_per_minute: int = 60
 

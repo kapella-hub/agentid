@@ -9,7 +9,19 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 const API_VERSION = 'v1';
 
 interface ApiRequestOptions extends RequestInit {
-  params?: Record<string, string>;
+  params?: Record<string, string | undefined>;
+  timeoutMs?: number;
+}
+
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public status: number,
+    public code?: string,
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
 }
 
 /**
@@ -37,13 +49,18 @@ class ApiClient {
     endpoint: string,
     options: ApiRequestOptions = {}
   ): Promise<T> {
-    const { params, headers, ...fetchOptions } = options;
+    const { params, headers, timeoutMs = 30000, ...fetchOptions } = options;
 
-    // Build URL with query params
+    // Build URL with query params (filter out undefined values)
     let url = `${this.baseUrl}${endpoint}`;
     if (params) {
-      const searchParams = new URLSearchParams(params);
-      url += `?${searchParams.toString()}`;
+      const filtered: Record<string, string> = {};
+      for (const [k, v] of Object.entries(params)) {
+        if (v !== undefined) filtered[k] = v;
+      }
+      if (Object.keys(filtered).length > 0) {
+        url += `?${new URLSearchParams(filtered).toString()}`;
+      }
     }
 
     // Prepare headers
@@ -56,21 +73,47 @@ class ApiClient {
       requestHeaders['Authorization'] = `Bearer ${this.apiKey}`;
     }
 
-    // Make request
-    const response = await fetch(url, {
-      ...fetchOptions,
-      headers: requestHeaders,
-    });
+    // Set up timeout via AbortController
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-    // Handle errors
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({
-        message: response.statusText,
-      }));
-      throw new Error(error.message || `API error: ${response.status}`);
+    try {
+      const response = await fetch(url, {
+        ...fetchOptions,
+        headers: requestHeaders,
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({
+          message: response.statusText,
+        }));
+        throw new ApiError(
+          error.message || error.error?.message || `API error: ${response.status}`,
+          response.status,
+          error.error?.code,
+        );
+      }
+
+      // Handle 204 No Content
+      if (response.status === 204) {
+        return undefined as T;
+      }
+
+      return response.json();
+    } catch (err) {
+      if (err instanceof ApiError) throw err;
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        throw new ApiError('Request timed out', 0, 'timeout');
+      }
+      throw new ApiError(
+        err instanceof Error ? err.message : 'Network error',
+        0,
+        'network_error',
+      );
+    } finally {
+      clearTimeout(timeoutId);
     }
-
-    return response.json();
   }
 
   // Agent endpoints
@@ -119,10 +162,10 @@ class ApiClient {
 
   // Message endpoints
   messages = {
-    email: (params: { agent_id?: string; direction?: string; limit?: number }) =>
-      this.request('/messages', { params: { channel: 'email', ...params } as any }),
-    sms: (params: { agent_id?: string; direction?: string; limit?: number }) =>
-      this.request('/messages', { params: { channel: 'sms', ...params } as any }),
+    email: (params?: { agent_id?: string; direction?: string; limit?: number }) =>
+      this.request('/messages', { params: { channel: 'email', ...params } as Record<string, string | undefined> }),
+    sms: (params?: { agent_id?: string; direction?: string; limit?: number }) =>
+      this.request('/messages', { params: { channel: 'sms', ...params } as Record<string, string | undefined> }),
     get: (id: string) => this.request(`/messages/${id}`),
     send: (data: { agent_id: string; to: string; channel: 'email' | 'sms'; body: string; subject?: string }) =>
       this.request('/messages/send', {
@@ -176,8 +219,8 @@ class ApiClient {
 
   // Audit log endpoints
   audit = {
-    list: (params?: { agent_id?: string; limit?: number }) =>
-      this.request('/audit', { params: params as any }),
+    list: (params?: { action?: string; resource_type?: string; limit?: number }) =>
+      this.request('/audit', { params: params as Record<string, string | undefined> }),
   };
 
   // Usage & billing
