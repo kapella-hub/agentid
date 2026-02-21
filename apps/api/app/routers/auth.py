@@ -1,5 +1,6 @@
 """Auth endpoints: register, login, API keys."""
 
+from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, status
@@ -116,7 +117,6 @@ async def revoke_api_key(key_id: UUID, auth: Auth, db: DB):
     api_key = await db.get(ApiKey, key_id)
     if not api_key or api_key.org_id != auth["org_id"]:
         raise HTTPException(status_code=404, detail="API key not found")
-    from datetime import datetime, timezone
     api_key.revoked_at = datetime.now(timezone.utc)
     await log_event(
         db, auth["org_id"], auth["type"], "api_key.revoked", "api_key", resource_id=key_id,

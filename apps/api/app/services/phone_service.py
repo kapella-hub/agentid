@@ -2,6 +2,7 @@
 
 from uuid import UUID
 
+import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,8 +23,6 @@ class TwilioClient:
         return (self.account_sid, self.auth_token)
 
     async def buy_number(self, country: str, capabilities: list[str]) -> dict:
-        import httpx
-
         # Search for available number
         async with httpx.AsyncClient() as client:
             search_resp = await client.get(
@@ -53,8 +52,6 @@ class TwilioClient:
             return {"number": data["phone_number"], "sid": data["sid"]}
 
     async def release_number(self, sid: str) -> None:
-        import httpx
-
         async with httpx.AsyncClient() as client:
             resp = await client.delete(
                 f"{self.base_url}/IncomingPhoneNumbers/{sid}.json",
@@ -63,8 +60,6 @@ class TwilioClient:
             resp.raise_for_status()
 
     async def send_sms(self, from_number: str, to: str, body: str) -> str:
-        import httpx
-
         async with httpx.AsyncClient() as client:
             resp = await client.post(
                 f"{self.base_url}/Messages.json",

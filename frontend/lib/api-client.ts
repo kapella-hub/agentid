@@ -77,9 +77,14 @@ class ApiClient {
   agents = {
     list: () => this.request('/agents'),
     get: (id: string) => this.request(`/agents/${id}`),
-    create: (data: { name: string }) =>
+    create: (data: { name: string; description?: string }) =>
       this.request('/agents', {
         method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    update: (id: string, data: Partial<{ name: string; description: string; status: string }>) =>
+      this.request(`/agents/${id}`, {
+        method: 'PATCH',
         body: JSON.stringify(data),
       }),
     delete: (id: string) =>
@@ -90,34 +95,40 @@ class ApiClient {
   identities = {
     email: {
       list: (agentId: string) =>
-        this.request(`/agents/${agentId}/email`, { params: { agent_id: agentId } }),
+        this.request(`/agents/${agentId}/email`),
       create: (agentId: string, data: { domain?: string }) =>
         this.request(`/agents/${agentId}/email`, {
           method: 'POST',
           body: JSON.stringify(data),
         }),
-      delete: (emailId: string) =>
-        this.request(`/identities/email/${emailId}`, { method: 'DELETE' }),
+      delete: (agentId: string, emailId: string) =>
+        this.request(`/agents/${agentId}/email/${emailId}`, { method: 'DELETE' }),
     },
     phone: {
       list: (agentId: string) =>
-        this.request(`/agents/${agentId}/phone`, { params: { agent_id: agentId } }),
+        this.request(`/agents/${agentId}/phone`),
       create: (agentId: string, data: { region: string }) =>
         this.request(`/agents/${agentId}/phone`, {
           method: 'POST',
           body: JSON.stringify(data),
         }),
-      delete: (phoneId: string) =>
-        this.request(`/identities/phone/${phoneId}`, { method: 'DELETE' }),
+      delete: (agentId: string, phoneId: string) =>
+        this.request(`/agents/${agentId}/phone/${phoneId}`, { method: 'DELETE' }),
     },
   };
 
   // Message endpoints
   messages = {
-    email: (params: { agent_id?: string; limit?: number }) =>
-      this.request('/messages/email', { params: params as any }),
-    sms: (params: { agent_id?: string; limit?: number }) =>
-      this.request('/messages/sms', { params: params as any }),
+    email: (params: { agent_id?: string; direction?: string; limit?: number }) =>
+      this.request('/messages', { params: { channel: 'email', ...params } as any }),
+    sms: (params: { agent_id?: string; direction?: string; limit?: number }) =>
+      this.request('/messages', { params: { channel: 'sms', ...params } as any }),
+    get: (id: string) => this.request(`/messages/${id}`),
+    send: (data: { agent_id: string; to: string; channel: 'email' | 'sms'; body: string; subject?: string }) =>
+      this.request('/messages/send', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
   };
 
   // Vault endpoints
@@ -130,8 +141,11 @@ class ApiClient {
         method: 'POST',
         body: JSON.stringify(data),
       }),
-    rotate: (secretId: string) =>
-      this.request(`/secrets/${secretId}/rotate`, { method: 'POST' }),
+    update: (secretId: string, data: { value: string }) =>
+      this.request(`/secrets/${secretId}`, {
+        method: 'PUT',
+        body: JSON.stringify(data),
+      }),
     delete: (secretId: string) =>
       this.request(`/secrets/${secretId}`, { method: 'DELETE' }),
   };
@@ -148,7 +162,27 @@ class ApiClient {
       this.request(`/api-keys/${keyId}`, { method: 'DELETE' }),
   };
 
+  // Webhook endpoints
+  webhooks = {
+    list: () => this.request('/webhooks'),
+    create: (data: { url: string; events: string[]; agent_id?: string }) =>
+      this.request('/webhooks', {
+        method: 'POST',
+        body: JSON.stringify(data),
+      }),
+    delete: (webhookId: string) =>
+      this.request(`/webhooks/${webhookId}`, { method: 'DELETE' }),
+  };
+
+  // Audit log endpoints
+  audit = {
+    list: (params?: { agent_id?: string; limit?: number }) =>
+      this.request('/audit', { params: params as any }),
+  };
+
   // Usage & billing
+  // NOTE: These billing endpoints are stubs — the backend does not implement
+  // billing routes. These are kept as placeholders for future integration.
   billing = {
     usage: (params?: { start_date?: string; end_date?: string }) =>
       this.request('/billing/usage', { params: params as any }),
@@ -169,6 +203,8 @@ export const api = new ApiClient();
 export type Agent = {
   id: string;
   name: string;
+  description?: string;
+  org_id: string;
   status: 'active' | 'inactive' | 'error';
   created_at: string;
   last_active: string;
@@ -196,6 +232,9 @@ export type Secret = {
   id: string;
   name: string;
   type: 'api-key' | 'password' | '2fa-seed' | 'oauth-token';
+  agent_id?: string;
+  org_id: string;
+  version: number;
   created_at: string;
   expires_at?: string;
 };

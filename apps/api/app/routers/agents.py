@@ -3,13 +3,14 @@
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import select
 
 from app.core.deps import DB, Auth
+from app.core.pagination import apply_cursor, encode_cursor
 from app.core.security import create_agent_token
 from app.models.agent import Agent, AgentToken
-from app.schemas import AgentCreate, AgentResponse, AgentTokenCreate, AgentTokenResponse, AgentUpdate
+from app.schemas import AgentCreate, AgentResponse, AgentTokenCreate, AgentTokenResponse, AgentUpdate, PaginatedResponse
 from app.services.audit_service import log_event
 
 router = APIRouter(prefix="/agents", tags=["agents"])
@@ -28,14 +29,27 @@ async def create_agent(req: AgentCreate, auth: Auth, db: DB):
     return agent
 
 
-@router.get("", response_model=list[AgentResponse])
-async def list_agents(auth: Auth, db: DB, limit: int = 50):
-    result = await db.execute(
-        select(Agent)
-        .where(Agent.org_id == auth["org_id"], Agent.status != "deleted")
-        .limit(limit)
+@router.get("", response_model=PaginatedResponse)
+async def list_agents(
+    auth: Auth,
+    db: DB,
+    limit: int = Query(default=20, le=100),
+    cursor: str | None = None,
+):
+    query = select(Agent).where(Agent.org_id == auth["org_id"], Agent.status != "deleted")
+    query = apply_cursor(query, cursor, Agent.id, limit)
+    result = await db.execute(query)
+    items = list(result.scalars().all())
+
+    has_more = len(items) > limit
+    if has_more:
+        items = items[:limit]
+
+    return PaginatedResponse(
+        data=[AgentResponse.model_validate(a) for a in items],
+        has_more=has_more,
+        cursor=encode_cursor(items[-1].id) if items else None,
     )
-    return result.scalars().all()
 
 
 @router.get("/{agent_id}", response_model=AgentResponse)
