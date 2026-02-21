@@ -43,12 +43,13 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
-          cache-dependency-path: apps/api/requirements.txt
+          cache-dependency-path: apps/api/pyproject.toml
 
       - name: Install dependencies
         run: |
           cd apps/api
-          pip install -r requirements.txt -r requirements-dev.txt
+          pip install ".[dev]"
+          pip install aiosqlite
 
       - name: Lint (ruff)
         run: |
@@ -59,7 +60,7 @@ jobs:
       - name: Type check (mypy)
         run: |
           cd apps/api
-          mypy . --ignore-missing-imports
+          mypy app --ignore-missing-imports
 
       - name: Run tests
         env:
@@ -90,27 +91,27 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-          cache-dependency-path: apps/web/package-lock.json
+          cache-dependency-path: frontend/package-lock.json
 
       - name: Install & lint
         run: |
-          cd apps/web
+          cd frontend
           npm ci
           npm run lint
 
       - name: Type check
         run: |
-          cd apps/web
+          cd frontend
           npm run type-check
 
       - name: Run tests
         run: |
-          cd apps/web
+          cd frontend
           npm test -- --ci --coverage
 
       - name: Build
         run: |
-          cd apps/web
+          cd frontend
           npm run build
 
   # --- Security scan ---

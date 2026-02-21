@@ -7,10 +7,10 @@
 FROM node:20-alpine AS frontend-build
 WORKDIR /app/web
 
-COPY apps/web/package.json apps/web/package-lock.json* ./
+COPY frontend/package.json frontend/package-lock.json* ./
 RUN npm ci --prefer-offline
 
-COPY apps/web/ ./
+COPY frontend/ ./
 RUN npm run build
 
 # --- Stage 2: Backend base ---
@@ -21,8 +21,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl build-essential libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
-COPY apps/api/requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+COPY apps/api/pyproject.toml ./
+RUN pip install --no-cache-dir .
 
 COPY apps/api/ ./
 COPY alembic/ /app/alembic/
@@ -40,8 +40,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=backend-base /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
 COPY --from=backend-base /usr/local/bin /usr/local/bin
 COPY --from=backend-base /app /app
-COPY --from=frontend-build /app/web/.next /app/static/web/.next
-COPY --from=frontend-build /app/web/public /app/static/web/public
+COPY --from=frontend-build /app/web/.next /app/static/frontend/.next
+COPY --from=frontend-build /app/web/public /app/static/frontend/public
 
 USER app
 EXPOSE 8000

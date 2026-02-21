@@ -6,15 +6,16 @@ from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import select
 
 from app.core.deps import DB, Auth
+from app.core.pagination import apply_cursor, encode_cursor
 from app.models.identity import EmailIdentity, Message, PhoneIdentity
-from app.schemas import MessageResponse, SendMessageRequest
+from app.schemas import MessageResponse, PaginatedResponse, SendMessageRequest
 from app.services.email_service import mailgun
 from app.services.phone_service import twilio_client
 
 router = APIRouter(prefix="/messages", tags=["messages"])
 
 
-@router.get("", response_model=list[MessageResponse])
+@router.get("", response_model=PaginatedResponse)
 async def list_messages(
     auth: Auth,
     db: DB,
@@ -22,6 +23,7 @@ async def list_messages(
     channel: str | None = None,
     direction: str | None = None,
     limit: int = Query(default=50, le=100),
+    cursor: str | None = None,
 ):
     q = select(Message).where(Message.org_id == auth["org_id"])
     if agent_id:
@@ -30,9 +32,19 @@ async def list_messages(
         q = q.where(Message.channel == channel)
     if direction:
         q = q.where(Message.direction == direction)
-    q = q.order_by(Message.created_at.desc()).limit(limit)
+    q = apply_cursor(q, cursor, Message.id, limit)
     result = await db.execute(q)
-    return result.scalars().all()
+    items = list(result.scalars().all())
+
+    has_more = len(items) > limit
+    if has_more:
+        items = items[:limit]
+
+    return PaginatedResponse(
+        data=[MessageResponse.model_validate(m) for m in items],
+        has_more=has_more,
+        cursor=encode_cursor(items[-1].id) if items else None,
+    )
 
 
 @router.get("/{message_id}", response_model=MessageResponse)

@@ -3,6 +3,7 @@
 from fastapi import FastAPI
 
 from app.core.config import settings
+from app.core.rate_limit import RateLimitMiddleware
 from app.routers import agents, audit, auth, email, hooks, messages, phone, vault, webhooks
 
 app = FastAPI(
@@ -10,6 +11,9 @@ app = FastAPI(
     description="Identity-as-a-Service for AI Agents",
     version="0.1.0",
 )
+
+# Rate limiting middleware
+app.add_middleware(RateLimitMiddleware)
 
 # Mount all routers under /v1
 for r in [auth.router, agents.router, email.router, phone.router, messages.router, vault.router, webhooks.router, audit.router]:
