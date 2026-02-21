@@ -22,6 +22,7 @@ from app.schemas import (
     RegisterRequest,
     TokenResponse,
 )
+from app.core.events import event_bus
 from app.services.audit_service import log_event
 
 router = APIRouter(tags=["auth"])
@@ -62,9 +63,17 @@ async def login(req: LoginRequest, db: DB):
     result = await db.execute(select(User).where(User.email == req.email))
     user = result.scalar_one_or_none()
     if not user or not verify_password(req.password, user.password_hash):
+        await event_bus.emit_background("auth.login_failed", {"email": req.email})
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     token = create_access_token({"sub": str(user.id), "type": "user"})
+
+    await event_bus.emit_background("auth.login", {
+        "user_id": str(user.id),
+        "org_id": str(user.org_id),
+        "email": user.email,
+    })
+
     return TokenResponse(access_token=token)
 
 

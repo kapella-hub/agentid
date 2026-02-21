@@ -6,6 +6,7 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     # App
     app_name: str = "AgentID"
+    environment: str = "development"
     debug: bool = False
     api_prefix: str = "/v1"
 

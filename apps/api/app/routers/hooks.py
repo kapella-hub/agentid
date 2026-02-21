@@ -9,6 +9,7 @@ from sqlalchemy import select
 
 from app.core.config import settings
 from app.core.database import async_session_factory
+from app.core.events import event_bus
 from app.models.identity import EmailIdentity, Message, PhoneIdentity
 
 router = APIRouter(prefix="/hooks", tags=["hooks"])
@@ -102,6 +103,17 @@ async def mailgun_inbound(request: Request):
         db.add(msg)
         await db.commit()
 
+        # Emit event for downstream hooks (webhook dispatch, analytics, etc.)
+        await event_bus.emit("message.received", {
+            "message_id": str(msg.id),
+            "org_id": str(identity.org_id),
+            "agent_id": str(identity.agent_id),
+            "channel": "email",
+            "direction": "inbound",
+            "sender": str(sender),
+            "recipient": str(recipient),
+        })
+
     return {"status": "ok"}
 
 
@@ -142,6 +154,17 @@ async def twilio_sms(request: Request):
         )
         db.add(msg)
         await db.commit()
+
+        # Emit event for downstream hooks
+        await event_bus.emit("message.received", {
+            "message_id": str(msg.id),
+            "org_id": str(identity.org_id),
+            "agent_id": str(identity.agent_id),
+            "channel": "sms",
+            "direction": "inbound",
+            "sender": str(from_),
+            "recipient": str(to),
+        })
 
     # Return TwiML empty response
     return "<Response></Response>"

@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# Git commit-msg hook — validate conventional commit format
+# Install: cp scripts/commit-msg .git/hooks/commit-msg && chmod +x .git/hooks/commit-msg
+
+set -e
+
+COMMIT_MSG_FILE="$1"
+COMMIT_MSG=$(head -1 "$COMMIT_MSG_FILE")
+
+# Conventional commit pattern: type(optional-scope): description
+PATTERN='^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-z0-9 -]+\))?: .{1,72}$'
+
+# Allow merge commits and version bumps
+if echo "$COMMIT_MSG" | grep -qE '^(Merge|Revert|v[0-9])'; then
+    exit 0
+fi
+
+if ! echo "$COMMIT_MSG" | grep -qE "$PATTERN"; then
+    echo ""
+    echo "ERROR: Commit message does not follow Conventional Commits format."
+    echo ""
+    echo "Expected: <type>(<scope>): <description>"
+    echo ""
+    echo "Types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert"
+    echo ""
+    echo "Examples:"
+    echo "  feat(auth): add MFA support for user login"
+    echo "  fix(api): handle null agent_id in webhook dispatch"
+    echo "  chore(deps): bump fastapi to 0.115.2"
+    echo ""
+    echo "Your message: $COMMIT_MSG"
+    echo ""
+    exit 1
+fi

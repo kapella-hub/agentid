@@ -12,6 +12,7 @@ from app.core.pagination import apply_cursor, encode_cursor
 from app.core.security import create_agent_token
 from app.models.agent import Agent, AgentToken
 from app.schemas import AgentCreate, AgentResponse, AgentTokenCreate, AgentTokenResponse, AgentUpdate, PaginatedResponse
+from app.core.events import event_bus
 from app.services.audit_service import log_event
 
 router = APIRouter(prefix="/agents", tags=["agents"])
@@ -27,6 +28,13 @@ async def create_agent(req: AgentCreate, auth: Auth, db: DB):
         raise HTTPException(status_code=409, detail="Agent name already exists in this org")
 
     await log_event(db, auth["org_id"], auth["type"], "agent.created", "agent", resource_id=agent.id)
+
+    await event_bus.emit_background("agent.created", {
+        "agent_id": str(agent.id),
+        "org_id": str(auth["org_id"]),
+        "name": agent.name,
+    })
+
     return agent
 
 
@@ -83,6 +91,11 @@ async def delete_agent(agent_id: UUID, auth: Auth, db: DB):
         raise HTTPException(status_code=404, detail="Agent not found")
     agent.status = "deleted"
     await log_event(db, auth["org_id"], auth["type"], "agent.deleted", "agent", resource_id=agent.id)
+
+    await event_bus.emit_background("agent.deleted", {
+        "agent_id": str(agent.id),
+        "org_id": str(auth["org_id"]),
+    })
 
 
 @router.post("/{agent_id}/tokens", response_model=AgentTokenResponse, status_code=201)
