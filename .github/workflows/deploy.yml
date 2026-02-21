@@ -11,7 +11,7 @@ concurrency:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    needs: []  # Add ci workflow reference if using workflow_call
+    needs: []  # Note: CI runs separately on the same push trigger
     if: github.ref == 'refs/heads/main'
 
     steps:

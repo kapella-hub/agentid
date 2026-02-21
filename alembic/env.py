@@ -13,10 +13,13 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Import your models' MetaData for autogenerate support
-# from models import Base
-# target_metadata = Base.metadata
-target_metadata = None
+# Import models for autogenerate support
+import sys
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "apps", "api"))
+from app.core.database import Base  # noqa: E402
+from app.models import auth, agent, identity, vault, webhook, audit  # noqa: E402, F401
+
+target_metadata = Base.metadata
 
 # Override sqlalchemy.url from environment
 database_url = os.getenv("DATABASE_URL", "")

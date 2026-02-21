@@ -6,9 +6,9 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: agentid
-      POSTGRES_USER: agentid
-      POSTGRES_PASSWORD: localdev
+      POSTGRES_DB: ${POSTGRES_DB:-agentid}
+      POSTGRES_USER: ${POSTGRES_USER:-agentid}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-localdev}
     ports:
       - "5432:5432"
     volumes:
@@ -46,7 +46,7 @@ services:
     env_file:
       - .env
     environment:
-      DATABASE_URL: postgresql+asyncpg://agentid:localdev@postgres:5432/agentid
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-agentid}:${POSTGRES_PASSWORD:-localdev}@postgres:5432/${POSTGRES_DB:-agentid}
       REDIS_URL: redis://redis:6379/0
       ENVIRONMENT: development
     depends_on:
@@ -67,7 +67,7 @@ services:
     env_file:
       - .env
     environment:
-      DATABASE_URL: postgresql+asyncpg://agentid:localdev@postgres:5432/agentid
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-agentid}:${POSTGRES_PASSWORD:-localdev}@postgres:5432/${POSTGRES_DB:-agentid}
       REDIS_URL: redis://redis:6379/0
       ENVIRONMENT: development
     depends_on:
@@ -101,7 +101,7 @@ services:
     env_file:
       - .env
     environment:
-      DATABASE_URL: postgresql+asyncpg://agentid:localdev@postgres:5432/agentid
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-agentid}:${POSTGRES_PASSWORD:-localdev}@postgres:5432/${POSTGRES_DB:-agentid}
       REDIS_URL: redis://redis:6379/0
       ENVIRONMENT: development
     depends_on:

@@ -67,9 +67,8 @@ jobs:
           DATABASE_URL: postgresql+asyncpg://agentid:test@localhost:5432/agentid_test
           REDIS_URL: redis://localhost:6379/0
           ENVIRONMENT: test
-          SECRET_KEY: test-secret-key
-          JWT_SECRET: test-jwt-secret
-          VAULT_MASTER_KEY: test-vault-key
+          AGENTID_JWT_SECRET_KEY: ${{ secrets.TEST_JWT_SECRET || 'ci-test-jwt-secret-minimum-32-chars-long' }}
+          AGENTID_VAULT_MASTER_KEY: ${{ secrets.TEST_VAULT_MASTER_KEY || 'ci-test-vault-key-minimum-32-chars' }}
         run: |
           cd apps/api
           alembic upgrade head
